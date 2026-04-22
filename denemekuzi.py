@@ -1,20 +1,14 @@
 import io
 import zipfile
-import random
-import string
-import qrcode
+import uuid
 from flask import Flask, render_template, request, send_file, session, redirect, url_for
+import qrcode
 
 app = Flask(__name__)
-app.secret_key = 'qr_sifre_anahtari'
+app.secret_key = "cok_gizli_bir_key_burasi" # Session güvenliği için
 
-ADMIN_PASSWORD = "1453" # Giriş şifren
-
-@app.route('/')
-def index():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    return render_template('admin.html')
+# Şifreni buradan değiştirebilirsin
+ADMIN_PASSWORD = "1234" 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -22,50 +16,63 @@ def login():
         if request.form.get('password') == ADMIN_PASSWORD:
             session['logged_in'] = True
             return redirect(url_for('index'))
-    return '''
-        <form method="post" style="text-align:center; margin-top:50px;">
-            <input type="password" name="password" placeholder="Şifre">
-            <button type="submit">Giriş</button>
-        </form>
-    '''
+        else:
+            return "Hatalı şifre! <a href='/login'>Tekrar dene</a>"
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+@app.route('/')
+def index():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    return render_template('admin.html')
 
 @app.route('/generate', methods=['POST'])
 def generate():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
 
-    adet = int(request.form.get('adet', 1))
-    
-    # Zip dosyasını bellekte oluştur (
+    try:
+        adet = int(request.form.get('adet', 5))
+    except ValueError:
+        adet = 5
+
+    # Zip dosyasını bellekte oluştur (Render disk yazmaya izin vermeyebilir)
     memory_file = io.BytesIO()
+    sifre_listesi = []
+
     with zipfile.ZipFile(memory_file, 'w') as zf:
-        karakterler = string.ascii_letters + string.digits
-        
         for i in range(adet):
-            sifre = ''.join(random.choice(karakterler) for _ in range(8))
-            
-            # QR Kod Oluştur
-            qr = qrcode.QRCode(version=1, box_size=10, border=4)
-            qr.add_data(sifre)
+            # 8 haneli rastgele benzersiz şifre üret
+            random_text = str(uuid.uuid4())[:8]
+            sifre_listesi.append(random_text)
+
+            # QR Kod oluştur
+            qr = qrcode.QRCode(version=1, box_size=10, border=5)
+            qr.add_data(random_text)
             qr.make(fit=True)
             img = qr.make_image(fill_color="black", back_color="white")
-            
-            # Resmi belleğe kaydet
-            img_io = io.BytesIO()
-            img.save(img_io, 'PNG')
-            img_io.seek(0)
-            
-            # Zip içine ekle
-            zf.writestr(f"sifre_{i+1}.png", img_io.getvalue())
-            
+
+            # Resmi zip içine ekle
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            zf.writestr(f"qr_kod_{i+1}.png", img_byte_arr.getvalue())
+
+        # İSTEDİĞİN ÖZELLİK: Tüm şifreleri bir metin dosyasına yaz ve zip'e ekle
+        sifre_metni = "\n".join(sifre_listesi)
+        zf.writestr("sifreler_listesi.txt", sifre_metni)
+
     memory_file.seek(0)
-    
     return send_file(
         memory_file,
         mimetype='application/zip',
         as_attachment=True,
-        download_name='qr_kodlar.zip'
+        download_name='qr_paketleri.zip'
     )
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
