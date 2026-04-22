@@ -8,7 +8,7 @@ app = Flask(__name__)
 app.secret_key = "cok_gizli_bir_key_burasi" # Session güvenliği için
 
 # Şifreni buradan değiştirebilirsin
-ADMIN_PASSWORD = "1234" 
+ADMIN_PASSWORD = "1453" 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
